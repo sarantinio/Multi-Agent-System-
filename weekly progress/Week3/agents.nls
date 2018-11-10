@@ -1,0 +1,409 @@
+buses-own [
+  ; Static, read-only variables. These values never change. You can read them, but you cannot change them.
+  bus_id          ; The ID of a given agent (bus). Each agent has a unique ID.
+  bus_type        ; The type of a given agent (bus). 1 means "small", 2 means "medium" and 3 means "large".
+    
+  ; Dynamic, read-only variables. These values may change over time. You can read them, but you cannot change them.
+  inbox           ; List containing all the incoming messages (a given message is a list like this [tick sender message]).
+  bus_passengers  ; List containing all the passengers that the agent (bus) is currently carrying (represented as a list like this [passenger_id bus_stop]).
+  previous_stop   ; ID of the last bus stop that the agent (bus) visited (-1 means that the agent has not visited any bus stop yet).
+  current_stop    ; ID of the bus stop where the agent (bus) currently is (-1 means that the agent is not at any bus stop).
+  next_stop       ; ID of the bus stop the agent (bus) is traveling to (-1 means that the agent is not travelling to any bus stop).
+
+  ; New local variables for students.
+  ; You can create any new local variable you want. Just declare them here.
+  bus_route
+  missed_passengers
+  group_passenger_list
+  last_checked_inbox
+  bus_traffic
+  next_decision
+  path
+]
+ 
+globals [graph]
+
+extensions [ nw ]
+
+; get real shortest distance between any 2 bus_stops                                     : ask bus_stop 0 [ show nw:weighted-distance-to bus_stop 5 "route_size" ]
+; get all bus stop between any 2 bus_stops than are being included in the shortest path  : ask bus_stop 0 [ show nw:turtles-on-weighted-path-to bus_stop 8 "route_size" ]
+
+; Initialize bus
+to init-buses
+  ; Initialize your agents here.
+  ; This list contains the topology of the entire network of bus stops, which is known to all agents. You can use this, for instance, to calculate the shortest path between two bus stops.
+  set graph [[22 15 14] [11 19 23 7] [8] [16 4 20 9] [3 5 10] [4 16 10 17] [8] [1 17 13] [2 6 9] [3 8 20] [4 5 17 13 21] [1 16 17] [20 15 22] [7 10 22 23] [0 23] [0 12 18] [3 5 11] [5 7 10 11] [15] [1 23] [3 9 12 21] [10 20 22] [0 12 13 21] [1 13 14 19]]
+  ifelse bus_id mod 2 = 1 [
+  set bus_route [ 9 8 2 8 6 8 9 20 12 15 18 15 0 14 23 13 22 21 10 13 23 19 1 7 17 11 16 5 10 4 3]
+  ] [
+  set bus_route [ 4 10 5 16 11 17 7 1 19 23 13 10 21 22 13 23 14 0 15 18 15 12 20 9 8 6 8 2 8 9 3 ] 
+  ]
+  set label bus_id
+  set path []
+  set last_checked_inbox 0
+end
+
+; Step function for bus
+to execute-actions
+  if count buses = 1 [
+    add-bus 3
+    add-bus 3
+    add-bus 3
+    add-bus 3
+    add-bus 3
+    add-bus 3
+    add-bus 3
+    add-bus 3
+    ]
+  ; Add decision making strategies for your agents here.
+  
+  
+  if current_stop != -1 [
+    ifelse bus_id = 24 [
+      ;check received messages
+      check-inbox-coordinator
+    ]
+    [
+      ;check received messages
+      check-inbox
+      ]
+     ;show  word "path : " path
+     if length path = 0 [
+       let capacity 0
+       if bus_type = 1[
+         set capacity 12
+       ]
+       if bus_type = 2[
+         set capacity 60
+       ]
+       if bus_type = 3[
+         set capacity 150
+       ]
+           
+       let bus-load ((length bus_passengers) / capacity) * 100
+       ;show word "passengers number" (length bus_passengers)
+       ;show word "capacity" capacity
+       ifelse bus-load > 80 [ 
+       ;decite the next stop
+       ;show  word "in " path
+       next-stop-decision
+       ]
+       [
+         explore
+       ]
+     ]
+     
+    ;pick up passengers
+    pick-up-passengers-stop
+    ;drop off passengers
+    drop-off-passengers-stop
+    ;determine whether is appropriate to add a bus
+    ;add-bus-decision
+    ;send your current passengers to all other buses
+    ifelse bus_id = 24 [
+      brodcast-message-coordinator
+    ]
+    [
+      brodcast-message
+      ]  
+  ]
+  
+  move-bus
+  
+  
+  ;show current_stop
+  ;show next_stop
+  
+  ; You are allowed to use the global variable 'ticks'.
+end
+
+to pick-up-passengers-stop
+  foreach get-passengers-at-stop current_stop [
+    if bus_type = 1 and length bus_passengers = 12 [
+      ;show  word "full bus " bus_id 
+      stop
+    ]
+    if bus_type = 2 and length bus_passengers = 60 [
+      ;show  word "full bus " bus_id 
+      stop
+    ]
+     if bus_type = 3 and length bus_passengers = 150 [
+      ;show  word "full bus " bus_id 
+      stop
+    ]
+    ;show word "add passenger " bus_id
+    pick-up-passenger item 0 ?
+    ]
+   
+end
+
+to explore
+  
+  let stops item current_stop graph
+  let bus_number_to_stop []
+  ifelse bus_traffic != 0 [
+    foreach stops[
+      let value item ? bus_traffic
+      set bus_number_to_stop lput value bus_number_to_stop
+    ]
+  ]
+  [
+    set next_decision one-of stops
+    stop
+  ] 
+    ;show word "stops : " stops
+    ;show word "traffic : " bus_number_to_stop
+  
+  let min-value min bus_number_to_stop
+  ;show min-value
+  ;let indices n-values (length bus_number_to_stop) [?]
+  let indices-and-values map [list ? item ? bus_traffic] stops
+  let next_ map [first ?] filter [item 1 ? = min-value] indices-and-values
+  ;show word "options : " next_
+  set next_decision one-of next_
+  ;show word "next : " next_decision
+end
+
+to next-stop-decision
+  
+  let destinations []
+  foreach bus_passengers [
+       set destinations lput item 1 ? destinations
+     ]
+     
+  let passengers_grouped map [frequency ? destinations] n-values 24 [? + 1]
+
+  
+  let scores []
+  let count_ 0
+  let distance_ 0
+  let local_path 0
+  let passenger-number  0
+  foreach passengers_grouped[
+    set passenger-number  0
+    ask bus_stop current_stop [set distance_ nw:weighted-distance-to bus_stop count_ "route_size"]
+    ask bus_stop current_stop [ set local_path nw:turtles-on-weighted-path-to bus_stop count_ "route_size" ]
+    ;show local_path
+    foreach but-first local_path[
+       ;show ?
+       let bus_st [who] of ?
+       let number item bus_st passengers_grouped  
+       set passenger-number passenger-number + number
+       ;show word "passenger-number " passenger-number
+    ]
+    ifelse bus_traffic != 0[
+    ifelse distance_ != 0 [  
+    let trafic_at_bus_stop item count_ bus_traffic
+    set trafic_at_bus_stop trafic_at_bus_stop * 150
+    let pass_score passenger-number * 75
+    let first_ ( pass_score  - distance_)
+    ;show passenger-number
+    ;show distance_
+    ;show word "fisrt " first_
+    ;show word "second " trafic_at_bus_stop
+    let score (first_  - trafic_at_bus_stop)
+    ;show word "passenger " ? 
+    ;show score
+    set scores lput score scores
+    ]
+    [
+      set scores lput -1000 scores
+    ]
+    ][
+     ;show word "stop " 1
+     let stops item current_stop graph
+     set next_decision one-of stops
+     stop
+    ]
+    set count_ count_ + 1
+  ]
+  
+    
+  ;show word "passengers : " passengers_grouped
+  ;show word "bus_traffic : " bus_traffic
+  
+  ;show bus_traffic
+  ;let stops item current_stop graph
+  ;let bus_number_to_stop []
+  ;ifelse bus_traffic != 0 [
+  ;  foreach stops[
+  ;    let value item ? bus_traffic
+  ;    set bus_number_to_stop lput value bus_number_to_stop
+  ;  ] 
+  ;  show stops
+  ;  show bus_number_to_stop
+    
+    
+  let max-value max scores
+  ;show min-value
+  let indices n-values (length scores) [?]
+  let indices-and-values map [list ? item ? scores] indices
+  let next_ map [first ?] filter [item 1 ? = max-value] indices-and-values
+  
+  
+  ;show next_
+  let destination 0
+  ifelse length next_ != 1 [
+    let next_index one-of next_
+    set destination next_index
+  ] [
+    set destination item 0 next_
+  ]
+  ;show destination
+  let local_path1 0
+  ask bus_stop current_stop [ set local_path1 nw:turtles-on-weighted-path-to bus_stop destination "route_size" ]
+  set path but-first local_path1
+  ;show word "scores : " scores
+  ;show word "path : " path
+  
+  
+end
+
+to move-bus
+
+  ifelse current_stop != -1
+  ; if block
+   [
+     if length path != 0[
+     set next_decision [who] of item 0 path
+     set path but-first path
+     ;show next_decision
+     ]
+     travel-to next_decision
+     ;set bus_route lput item 0 bus_route but-first bus_route
+     ]
+   ;else block
+   [
+     travel-to next_stop 
+     ;show (word "goes to next stop:" next_stop)
+     ]
+   
+   ;show bus_passengers
+   
+end
+
+to drop-off-passengers-stop
+  
+  ; Iterate through passengers
+  foreach bus_passengers [
+    ; If the passenger is at the desirable location then it gets out
+    if item 1 ? = current_stop [
+      drop-off-passenger item 0 ?
+      ;show word "drop passenger " bus_id
+    ]   
+  ]
+  ;drop-off-passenger
+  
+end
+  
+to add-bus-decision
+  
+    if length get-passengers-at-stop current_stop > 0 [
+      set  missed_passengers 0
+      set missed_passengers missed_passengers + length get-passengers-at-stop current_stop 
+      set missed_passengers missed_passengers + length get-passengers-at-stop previous_stop 
+      set missed_passengers missed_passengers + length get-passengers-at-stop item 0 bus_route
+      ;show word "goes to current_stop:" current_stop
+      ;show word "goes to previous_stop:" previous_stop 
+      ;show word "goes to next stop:" item 0 bus_route
+      ;show word "bus : " bus_id
+      ;show word "passengers missed : " missed_passengers 
+    ]
+    if ticks mod 50 = 0 [
+      if missed_passengers > 50 and missed_passengers < 100 [
+        add-bus 1 
+      ] 
+    
+      if missed_passengers > 100 and missed_passengers < 150 [
+       add-bus 2 
+      ] 
+    
+      if missed_passengers > 150 [
+       add-bus 3 
+      ]
+     ]
+    
+end
+
+;send the bus_traffic to all 
+to brodcast-message-coordinator
+     let other_bus_ids [bus_id] of other buses
+     
+     foreach other_bus_ids [
+      send-message ? (bus_traffic)
+     ]
+end
+
+; send a message with bus_type, current capacity, current bus-stop, next bus-stop and number of passengers grouped by destination.
+to brodcast-message
+     let other_bus_ids [bus_id] of other buses
+     let destinations []
+     
+     foreach bus_passengers [
+       set destinations lput item 1 ? destinations
+     ]
+     
+     let passengers_grouped map [frequency ? destinations] n-values 24 [? + 1]
+     let capacity length bus_passengers
+     
+     send-message 24 (list bus_type capacity current_stop next_decision passengers_grouped)
+     
+end
+
+to check-inbox-coordinator
+  ;list to count the trafic for each bus-stop
+  set bus_traffic n-values 24 [0]
+  let n count buses
+  ;we create this list to make sure that we consider only the last message from each bus 
+  let number_of_buses n-values n [0] 
+  ;show number_of_buses
+  let bus_number bus_id - 24
+  set number_of_buses replace-item bus_number number_of_buses 1 
+  
+  ;Iterate through the most recent messages from each bus to create the bus traffic 
+  foreach reverse inbox [
+    ;take the bus id of the bus that sent this specific message
+    let bus item 1 ?
+    set bus bus - 24
+    ;take the list with the information about this bus
+    let l item 2 ?
+    ;take the next stop of the bus
+    let n_stop item 3 l
+    
+    
+    let new_number item n_stop bus_traffic
+    ;if this is the most recent message of this bus add the next stop in to the traffic table
+    if item bus number_of_buses = 0 [
+      set new_number new_number + 1
+      ;Update bus traffic table
+      set bus_traffic replace-item n_stop bus_traffic new_number
+      ;Update the buses table
+      set number_of_buses replace-item bus number_of_buses 1
+    ]
+    
+    ;if we have the next stop for each bus then stop  
+    let b True
+    foreach number_of_buses [
+      if ? = 0[
+        set b  False
+        ]
+    ]
+    if b = True [
+      stop
+      ]
+  ]
+  
+end
+
+to check-inbox
+  ;Take the most updated traffic table
+  if  not (length inbox = 0) [
+    let most_recend_coord_message item (length inbox - 1) inbox
+    set bus_traffic item 2 most_recend_coord_message
+  ]
+  
+end
+
+to-report frequency [i lst]
+  report length filter [? = i] lst
+end

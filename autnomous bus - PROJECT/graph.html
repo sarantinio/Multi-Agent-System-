@@ -1,0 +1,140 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN">
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Force based label placement</title>
+    <script type="text/javascript" src="http://mbostock.github.com/d3/d3.js?2.6.0"></script>
+    <script type="text/javascript" src="http://mbostock.github.com/d3/d3.layout.js?2.6.0"></script>
+    <script type="text/javascript" src="http://mbostock.github.com/d3/d3.geom.js?2.6.0"></script>
+  </head>
+  <body>
+<script type="text/javascript" charset="utf-8">
+      var w = 960, h = 500;
+
+      var labelDistance = 0;
+
+      var vis = d3.select("body").append("svg:svg").attr("width", w).attr("height", h);
+
+      var nodes = [];
+      var labelAnchors = [];
+      var labelAnchorLinks = [];
+      var links = [];
+      var graph = [[22, 15, 14], [11, 19, 23, 7], [8], [16, 4, 20, 9], [3, 5, 10], [4, 16, 10, 17], [8], [1, 17, 13], [2, 6, 9], [3, 8, 20], [4, 5, 17, 13, 21], [1, 16, 17], [20, 15, 22], [7, 10, 22, 23], [0, 23], [0, 12, 18], [3, 5, 11], [5, 7, 10, 11], [15], [1, 23], [3, 9, 12, 21], [10, 20, 22], [0, 12, 13, 21], [1, 13, 14, 19]];
+
+      var distances = [[4.47213595499958, 8.54400374531753, 8.94427190999916], [10.63014581273465, 4.242640687119285, 4, 5], [7.810249675906654], [16.76305461424021, 3.1622776601683795, 5.0990195135927845, 4.242640687119285], [3.1622776601683795, 10, 5.656854249492381], [10, 9.433981132056603, 7.211102550927978, 5.0990195135927845], [6.082762530298219], [5, 4.123105625617661, 6.324555320336759], [7.810249675906654,  6.082762530298219, 6.082762530298219], [4.242640687119285, 6.082762530298219, 2.8284271247461903], [5.656854249492381, 7.211102550927978, 7.0710678118654755, 3, 7.0710678118654755], [10.63014581273465, 14.142135623730951, 6.082762530298219], [8.54400374531753, 5, 6.324555320336759], [6.324555320336759, 3, 8, 7.280109889280518], [8.94427190999916, 4.123105625617661], [8.54400374531753, 5, 3.1622776601683795], [16.76305461424021, 9.433981132056603, 14.142135623730951], [5.0990195135927845, 4.123105625617661, 7.0710678118654755, 6.082762530298219], [3.1622776601683795], [4.242640687119285, 3.1622776601683795], [5.0990195135927845, 2.8284271247461903, 8.54400374531753, 3.1622776601683795], [7.0710678118654755, 3.1622776601683795, 2.23606797749979], [4.47213595499958, 6.324555320336759, 8, 2.23606797749979], [4, 7.280109889280518, 4.123105625617661, 3.1622776601683795]];
+
+      var amsterdam_bus_stops_names = ["Amstel", "Amstelveenseweg", "Buikslotermeer", "Centraal", "Dam",
+    "Evertsenstraat", "Floradorp", "Haarlemmermeerstation", "Hasseltweg", "Hendrikkade",
+    "Leidseplein", "Lelylaan", "Muiderpoort", "Museumplein", "RAI", "SciencePark", "Sloterdijk",
+    "Surinameplein", "UvA", "VU", "Waterlooplein", "Weesperplein", "Wibautstraat", "Zuid"];
+
+      for(var i = 0; i < amsterdam_bus_stops_names.length; i++) {
+        var node = {
+          label : i 
+        };
+        nodes.push(node);
+        labelAnchors.push({
+          node : node
+        });
+        labelAnchors.push({
+          node : node
+        });
+      };
+
+      for(var i = 0; i < graph.length; i++) {
+        for(var j = 0; j < graph[i].length; j++) {
+            links.push({
+              source : i,
+              target : graph[i][j],
+              weight : distances[i][j]
+            });
+        }
+        labelAnchorLinks.push({
+          source : i * 2,
+          target : i * 2 + 1,
+          weight : distances[i][j]
+        });
+      };
+
+      var force = d3.layout.force().size([w, h]).nodes(nodes).links(links).gravity(1).linkDistance(50).charge(-3000).linkStrength(function(x) {
+        return x.weight 
+      });
+
+
+      force.start();
+
+      var force2 = d3.layout.force().nodes(labelAnchors).links(labelAnchorLinks).gravity(0).linkDistance(0).linkStrength(8).charge(-100).size([w, h]);
+      force2.start();
+
+      var link = vis.selectAll("line.link").data(links).enter().append("svg:line").attr("class", "link").style("stroke", "#CCC");
+
+      var node = vis.selectAll("g.node").data(force.nodes()).enter().append("svg:g").attr("class", "node");
+      node.append("svg:circle").attr("r", 5).style("fill", "#555").style("stroke", "#FFF").style("stroke-width", 3);
+      node.call(force.drag);
+
+
+      var anchorLink = vis.selectAll("line.anchorLink").data(labelAnchorLinks)//.enter().append("svg:line").attr("class", "anchorLink").style("stroke", "#999");
+
+      var anchorNode = vis.selectAll("g.anchorNode").data(force2.nodes()).enter().append("svg:g").attr("class", "anchorNode");
+      anchorNode.append("svg:circle").attr("r", 0).style("fill", "#FFF");
+        anchorNode.append("svg:text").text(function(d, i) {
+        return i % 2 == 0 ? "" : d.node.label
+      }).style("fill", "#555").style("font-family", "Arial").style("font-size", 12);
+
+      var updateLink = function() {
+        this.attr("x1", function(d) {
+          return d.source.x;
+        }).attr("y1", function(d) {
+          return d.source.y;
+        }).attr("x2", function(d) {
+          return d.target.x;
+        }).attr("y2", function(d) {
+          return d.target.y;
+        });
+
+      }
+
+      var updateNode = function() {
+        this.attr("transform", function(d) {
+          return "translate(" + d.x + "," + d.y + ")";
+        });
+
+      }
+
+
+      force.on("tick", function() {
+
+        force2.start();
+
+        node.call(updateNode);
+
+        anchorNode.each(function(d, i) {
+          if(i % 2 == 0) {
+            d.x = d.node.x;
+            d.y = d.node.y;
+          } else {
+            var b = this.childNodes[1].getBBox();
+
+            var diffX = d.x - d.node.x;
+            var diffY = d.y - d.node.y;
+
+            var dist = Math.sqrt(diffX * diffX + diffY * diffY);
+
+            var shiftX = b.width * (diffX - dist) / (dist * 2);
+            shiftX = Math.max(-b.width, Math.min(0, shiftX));
+            var shiftY = 5;
+            this.childNodes[1].setAttribute("transform", "translate(" + shiftX + "," + shiftY + ")");
+          }
+        });
+
+
+        anchorNode.call(updateNode);
+
+        link.call(updateLink);
+        anchorLink.call(updateLink);
+
+      });
+
+    </script>
+  </body>
+</html>
